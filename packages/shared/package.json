@@ -13,6 +13,7 @@
   },
   "scripts": {
     "lint": "eslint .",
+    "test": "node --test --experimental-strip-types src/*.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

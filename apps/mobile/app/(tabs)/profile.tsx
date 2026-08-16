@@ -263,6 +263,20 @@ export default function ProfileScreen() {
         Services
       </Text>
       <Pressable
+        className="mb-2 flex-row items-center gap-3 rounded-2xl border border-gray-100 p-4 active:bg-gray-50"
+        onPress={() => router.push("/gradebook")}
+      >
+        <View className="h-11 w-11 items-center justify-center rounded-xl bg-astra-light">
+          <Ionicons name="book-outline" size={22} color="#04107E" />
+        </View>
+        <View className="flex-1">
+          <Text className="text-base font-semibold text-gray-900">Gradebook</Text>
+          <Text className="text-xs text-gray-500">Your exams and grades · private to you</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+      </Pressable>
+
+      <Pressable
         className="flex-row items-center gap-3 rounded-2xl border border-gray-100 p-4 active:bg-gray-50"
         onPress={() => router.push("/classrooms")}
       >

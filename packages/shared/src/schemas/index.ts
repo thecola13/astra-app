@@ -75,6 +75,95 @@ export const academicProfileInput = z.object({
 });
 export type AcademicProfileInput = z.infer<typeof academicProfileInput>;
 
+// ── Academic courses (official catalogue) ───────────────────────────────────
+
+/** An official course as offered to one programme. */
+export const academicCourse = z.object({
+  id: z.string(),
+  code: z.string(),
+  title: z.string(),
+  language: z.string().nullable(),
+  credits: z.number().int().positive(),
+  semester: z.string().nullable(),
+  courseType: z.string().nullable(),
+  sourceUrl: z.string().url(),
+});
+export type AcademicCourse = z.infer<typeof academicCourse>;
+
+/** GET /api/academic/courses — course picker results for the gradebook. */
+export const academicCourseSearchResponse = z.object({
+  courses: z.array(academicCourse),
+});
+export type AcademicCourseSearchResponse = z.infer<typeof academicCourseSearchResponse>;
+
+// ── Gradebook (private, self-only) ──────────────────────────────────────────
+
+export const examStatus = z.enum(["PLANNED", "PASSED"]);
+export type ExamStatus = z.infer<typeof examStatus>;
+
+/** One exam: planned until it's passed. Failed sittings are not recorded. */
+export const examRecord = z.object({
+  id: z.string(),
+  course: z
+    .object({ id: z.string(), code: z.string(), title: z.string() })
+    .nullable(),
+  customTitle: z.string().nullable(),
+  credits: z.number().int().positive(),
+  studyYear: z.number().int(),
+  semester: z.string().nullable(),
+  status: examStatus,
+  grade: z.number().int().nullable(),
+  lode: z.boolean(),
+  passFail: z.boolean(),
+  examDate: z.string().nullable(), // ISO date
+  notes: z.string().nullable(),
+  updatedAt: z.string(),
+});
+export type ExamRecord = z.infer<typeof examRecord>;
+
+/** GET /api/me/gradebook — every exam the student has recorded. */
+export const gradebookResponse = z.object({
+  records: z.array(examRecord),
+});
+export type GradebookResponse = z.infer<typeof gradebookResponse>;
+
+/**
+ * Create/replace payload. The refinements mirror the CHECK constraints in the
+ * gradebook migration — Zod gives the student a readable message, the database
+ * is what actually guarantees it.
+ */
+export const examRecordInput = z
+  .object({
+    courseId: z.string().min(1).nullable().optional(),
+    customTitle: z.string().trim().min(1).max(200).nullable().optional(),
+    credits: z.number().int().min(1).max(60),
+    studyYear: z.number().int().min(1).max(6),
+    semester: z.string().min(1).max(8).nullable().optional(),
+    status: examStatus.default("PLANNED"),
+    grade: z.number().int().min(18).max(30).nullable().optional(),
+    lode: z.boolean().default(false),
+    passFail: z.boolean().default(false),
+    examDate: z.string().datetime().nullable().optional(),
+    notes: z.string().max(2000).nullable().optional(),
+  })
+  .refine((v) => Boolean(v.courseId) || Boolean(v.customTitle), {
+    message: "Pick a course or give the exam a title.",
+    path: ["customTitle"],
+  })
+  .refine((v) => !v.lode || v.grade === 30, {
+    message: "Lode only applies to a grade of 30.",
+    path: ["lode"],
+  })
+  .refine(
+    (v) =>
+      v.status === "PASSED" && !v.passFail ? typeof v.grade === "number" : v.grade == null,
+    {
+      message: "A graded pass needs a grade of 18–30; planned and pass/fail exams take none.",
+      path: ["grade"],
+    }
+  );
+export type ExamRecordInput = z.infer<typeof examRecordInput>;
+
 /** Shape returned by GET /api/me for the authenticated student. */
 export const meResponse = z.object({
   id: z.string(),

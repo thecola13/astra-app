@@ -16,6 +16,7 @@
     "migrate:deploy": "prisma migrate deploy",
     "studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
+    "seed:courses": "tsx prisma/seed-courses.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

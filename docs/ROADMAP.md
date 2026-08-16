@@ -56,8 +56,19 @@ gpt-4o-mini) → pgvector similarity search over a `Document` table (`vector`
 extension + IVFFlat cosine index migrated). Content pipeline in `bocconi-scraper/`
 (Playwright crawl of astrabocconi.com + scoped unibocconi.it sections → PDFs →
 OpenAI-embedded chunks). Needs `OPENAI_API_KEY` + a crawl/ingest run to go live.
-**Parallel next tracks → reward redemption (spend), plus academic profile/catalogue
-→ gradebook and analytics; then News push + profile targeting.** Legend:
+**Academic catalogue + gradebook landed (Phases 10A/10B):** the year's full
+course list is scraped from `didattica.unibocconi.eu` into a committed
+`bocconi-scraper/courses-<year>.json`, seeded into `AcademicCourse` /
+`AcademicCourseProgramme`, and searchable via `/api/academic/courses`. Students
+record their own exams through self-only `/api/me/gradebook` endpoints and a
+mobile `/gradebook` screen (one row per exam: planned until passed). The
+weighted average, credit totals and average trend are computed in
+`@astra/shared` and shown on that screen. **The Exchange and MSc selection-score
+estimates are the rest of 10C and deliberately absent** until the official
+rules are in hand.
+**Parallel next tracks → reward redemption (spend), plus the 10C estimators and
+profile-driven surfaces (10D); then News push + profile targeting.**
+Legend:
 `[x]` done · `[~]` partial · `[ ]` todo.
 
 ---
@@ -176,35 +187,35 @@ out to wherever tickets are actually sold. (The `Rsvp`/`Ticket` models, the
 
 ### Phase 10A — Official academic catalogue _(🤖; structured source of truth)_
 
-- [ ] 🤖 Model `AcademicProgramme`, `AcademicCatalogVersion`, `AcademicCourse`, `CourseOffering`, `ClassGroup`, and parent/module relationships in Neon.
-- [ ] 🤖 Store official course code, title, credits, study year, semester, compulsory/elective status, module number, programme, class groups, source URL, and retrieval time.
-- [ ] 🤖 Build an idempotent structured sync for public Bocconi programme/course pages by reusing the existing Playwright crawler's robots, rate-limit, and navigation safeguards.
-- [ ] 🤖 Version every import by academic year and retain prior snapshots: Bocconi explicitly notes that programme structures can change.
-- [ ] 🤖 Parse structured HTML into catalogue records; do not use RAG chunks as the authoritative academic database.
-- [ ] 🤖 Start with a manually run and reviewed import. Add scheduling only after fixture-backed parser tests prove stable.
-- [ ] 🤖 Cover undergraduate, MSc, MA/CLMG, official tracks and retained legacy structures in the structured course/offering import.
+- [x] 🤖 Model `AcademicCourse` + `AcademicCourseProgramme` (credits/semester/type are per programme) alongside the existing `AcademicCatalogue`/`AcademicProgramme`/`AcademicClassGroup`/`AcademicTrack`. **`CourseOffering` and per-course class groups were dropped** — class groups already exist at programme level and nothing consumed a separate offering. Module parent/child deferred to 10C, which is the first thing that needs it.
+- [x] 🤖 Store official course code, title, credits, semester, compulsory/elective type, language, programme, source URL, and retrieval time. _(Study year is **not** published per course by Bocconi — only the study-plan pages carry it, as categories rather than codes — so students set the year on their own record.)_
+- [x] 🤖 Idempotent import: `bocconi-scraper/scrape-courses.mjs` (plain `fetch`, politeness delay, retries — these pages are server-rendered PHP, so Playwright is unnecessary) → committed `courses-<year>.json` → `npm run seed:courses` upserts by `(catalogue, code)` and reports unmatched programme codes instead of importing silently.
+- [x] 🤖 Version every import by academic year: the JSON snapshot is committed and the catalogue row keyed by academic year, so prior snapshots survive in git.
+- [x] 🤖 Parse structured HTML into catalogue records; RAG chunks are not the academic database.
+- [x] 🤖 Manually run and reviewed import, with fixture-backed parser tests (`bocconi-scraper/course-parse.test.mjs`). **No scheduling** — a re-run is a command plus a reviewed diff.
+- [x] 🤖 Covers every programme in the year's course index (BSc, MSc, MA/CLMG and legacy codes), since the import is driven by the index rather than a programme list.
 - [ ] 🙋 Review imported programmes, class groups, credits, semesters, and module links against the [official study plans](https://www.unibocconi.it/en/programs/bachelor-science/management/study-plan) and [course catalogue](https://didattica.unibocconi.it/ts/tsn_anteprima.php?anno=2027&cod_ins=30280).
 
 ### Phase 10B — Personal gradebook _(🤖; private student-owned data)_
 
-- [ ] 🤖 Add user-owned gradebook records for official offerings plus custom/elective/exchange courses.
-- [ ] 🤖 Track planned/completed status, exam date, registration date, credits, grade (18–30), `30 e lode`, pass/fail eligibility, optional notes, and per-course class override.
-- [ ] 🤖 Preserve exam attempts/history instead of overwriting a previous attempt; make the accepted/final attempt explicit.
-- [ ] 🤖 Seed the gradebook from the selected programme, study year, and catalogue version without deleting student-entered records when the profile changes.
-- [ ] 🤖 Add authenticated self-only gradebook endpoints and Zod contracts; enforce `self:read` / `self:write` in the central authorization layer.
-- [ ] 🤖 Add a standalone mobile `/gradebook` screen linked from Home and Profile (no sixth tab for the MVP), grouped by year and semester.
-- [ ] 🤖 Support add/edit/delete, electives, module relationships, loading/empty/error states, and a clear distinction between official catalogue data and student-entered data.
+- [x] 🤖 `ExamRecord` covers official courses (`courseId`) plus custom/elective/exchange ones (`customTitle`).
+- [x] 🤖 Tracks planned/passed status, exam date, credits, grade (18–30), `30 e lode`, pass/fail, notes, study year and semester. _(Registration date and per-course class override skipped — nothing reads them yet.)_
+- [~] 🤖 **Attempt history was dropped as a non-goal:** a failed sitting leaves no trace on the transcript and a grade cannot be refused, so `FAILED`/`REJECTED` had nothing to describe. An exam is `PLANNED` until it is `PASSED`, one row per exam, enforced by a partial unique index.
+- [~] 🤖 Profile changes never touch gradebook records (nothing cascades from the profile). **Pre-seeding a plan from the programme's compulsory courses is not built** — students add exams themselves.
+- [x] 🤖 Self-only `GET/POST /api/me/gradebook` and `PUT/DELETE /api/me/gradebook/:id` + `GET /api/academic/courses`, Zod contracts in `@astra/shared`, `self:read`/`self:write` through `lib/authz.ts`, ownership enforced inside the query.
+- [x] 🤖 Standalone mobile `/gradebook` screen linked from Home and Profile (no sixth tab), grouped by year then semester.
+- [x] 🤖 Add/edit/delete, catalogue picker with an "outside my programme" search plus free-text fallback, loading/empty/error states, and catalogue data visibly distinct from student-entered data. _(Module relationships deferred with 10C.)_
 - [ ] 🙋 Verify manual entry, attempts, electives/exchange courses, profile changes, and cross-device persistence.
 
 ### Phase 10C — Academic analytics _(🤖; estimates, not official rankings)_
 
-- [ ] 🤖 Implement pure, tested calculation functions for credit-weighted average, completed/planned credits, passed/remaining exams, and average trend.
-- [ ] 🤖 Show two deliberate views: **module-inclusive average** includes each completed module immediately; **completed-course average** excludes a modular parent course until all required modules are complete, then uses its combined credit-weighted result.
+- [x] 🤖 Pure, tested calculation functions in `packages/shared/src/gradebook-stats.ts` — credit-weighted average (`30 e lode` = 31), graded vs earned credits, planned credits, passed/planned counts, and the running average trend. No endpoint and no query: mobile already holds every record.
+- [x] 🤖 Show two deliberate views: **module-inclusive average** includes each completed module immediately; **completed-course average** leaves a modular course out while any of its modules is still planned. The parent is derived from the title (`moduleParent()`), which already carries the module marker — no schema change, no re-scrape. _The catalogue cannot answer "which modules are required": it lists elective module pools (three MODULE I options for `CRITICAL APPROACHES TO THE ARTS II`), lone modules whose sibling ran in another year (`50213 ROMAN LAW - MODULE 2`), and the same parent split differently per programme (`MATHEMATICS` is 1+2 for BESS, only 2 for WBB). The student's own gradebook is the authority instead. Parent names are matched one typo apart, because the catalogue misspells `MANAGEMENT AND ECONOMICS FOR SUSTAINABILTY` in module 1 but not module 2; a differing sequence numeral (`ARTS I` vs `ARTS II`) is never forgiven. Checked against all 41 module parents in the 2027 catalogue: one merge, the intended one._
 - [ ] 🤖 Add an undergraduate Exchange score estimate using academic-year/programme-specific coefficients, credit scope, minimum-credit threshold, and deadline rules.
 - [ ] 🤖 Add an internal Bocconi MSc admission score estimate using the applicable round threshold, weighted average converted to 110, module treatment, extra-credit adjustment, and `in corso` status.
-- [ ] 🤖 Store each rule's academic year, programme/level, selection round, effective dates, official source URL, and version; never hard-code one formula as timeless policy.
+- [ ] 🤖 Store each rule's academic year, programme/level, selection round, effective dates, official source URL, and version; never hard-code one formula as timeless policy. **Decided:** committed constants keyed by year and round, like `courses-<year>.json` — git is the version history, a rule change is a reviewed PR. No rules table, no admin UI.
 - [ ] 🤖 Label every selection score as an estimate and show the formula inputs/as-of deadline so students can reconcile it with their transcript.
-- [ ] 🤖 Test honors, pass/fail activities, modules, partial courses, zero graded credits, exchange scope/deadlines, programme coefficients, MSc rounds, and rounding.
+- [~] 🤖 Test honors, pass/fail activities, modules, partial courses, zero graded credits, exchange scope/deadlines, programme coefficients, MSc rounds, and rounding. _(Done for the averages: `packages/shared/src/gradebook-stats.test.mjs`. The estimator cases land with the estimators.)_
 - [ ] 🙋 Validate sample calculations against the current [Exchange criteria](https://www.unibocconi.it/en/current-students/international-mobility/exchange-program/undergraduate-selection-criteria) and [MSc admission rules](https://www.unibocconi.it/en/current-students/application-and-admissions).
 
 ### Phase 10D — Profile-driven academic experience _(🤖)_

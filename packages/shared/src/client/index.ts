@@ -8,8 +8,12 @@ import type {
   ChatResponse,
   MaterialsResponse,
   AcademicCatalogueResponse,
+  AcademicCourseSearchResponse,
   AcademicProfile,
   AcademicProfileInput,
+  ExamRecord,
+  ExamRecordInput,
+  GradebookResponse,
 } from "../schemas";
 
 // Typed API client used by the mobile app to call apps/web's /api/* routes.
@@ -93,6 +97,44 @@ export function createApiClient(options: ApiClientOptions) {
             body: JSON.stringify(input),
           })
         ).data,
+      /**
+       * Official courses for the gradebook picker; `q` matches code or title.
+       * Defaults to the student's own programme — pass `all` for electives and
+       * exchange courses from anywhere in the catalogue.
+       */
+      courses: async (params: { q?: string; programmeId?: string; all?: boolean } = {}) => {
+        const qs = new URLSearchParams(
+          Object.entries({ ...params, all: params.all ? "1" : "" }).filter(
+            ([, v]) => v
+          ) as [string, string][]
+        ).toString();
+        return (
+          await request<AcademicCourseSearchResponse>(
+            `/api/academic/courses${qs ? `?${qs}` : ""}`
+          )
+        ).data;
+      },
+    },
+
+    /** Private gradebook. Self-only: there is no admin-facing counterpart. */
+    gradebook: {
+      list: async () => (await request<GradebookResponse>("/api/me/gradebook")).data,
+      create: async (input: ExamRecordInput) =>
+        (
+          await request<{ record: ExamRecord }>("/api/me/gradebook", {
+            method: "POST",
+            body: JSON.stringify(input),
+          })
+        ).data,
+      update: async (id: string, input: ExamRecordInput) =>
+        (
+          await request<{ record: ExamRecord }>(`/api/me/gradebook/${id}`, {
+            method: "PUT",
+            body: JSON.stringify(input),
+          })
+        ).data,
+      remove: async (id: string) =>
+        (await request<{ ok: true }>(`/api/me/gradebook/${id}`, { method: "DELETE" })).data,
     },
 
     points: {

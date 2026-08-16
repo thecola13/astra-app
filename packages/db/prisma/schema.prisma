@@ -87,6 +87,11 @@ enum Platform {
   ANDROID
 }
 
+enum ExamStatus {
+  PLANNED
+  PASSED
+}
+
 // ============================================================================
 // Identity & access
 // ============================================================================
@@ -118,6 +123,7 @@ model User {
   auditLogs         AuditLog[]              @relation("AuditActor")
   partnerMembership PartnerMembership?
   academicProfile   StudentAcademicProfile?
+  examRecords       ExamRecord[]
 
   // Better Auth (email-OTP). Managed by Better Auth via the Prisma client.
   sessions Session[]
@@ -227,6 +233,7 @@ model AcademicCatalogue {
   createdAt    DateTime @default(now())
 
   programmes AcademicProgramme[]
+  courses    AcademicCourse[]
 }
 
 model AcademicProgramme {
@@ -240,10 +247,11 @@ model AcademicProgramme {
   active        Boolean @default(true)
   legacy        Boolean @default(false)
 
-  catalogue   AcademicCatalogue        @relation(fields: [catalogueId], references: [id], onDelete: Cascade)
+  catalogue   AcademicCatalogue         @relation(fields: [catalogueId], references: [id], onDelete: Cascade)
   classGroups AcademicClassGroup[]
   tracks      AcademicTrack[]
   profiles    StudentAcademicProfile[]
+  courses     AcademicCourseProgramme[]
 
   @@unique([catalogueId, code])
   @@index([catalogueId, active])
@@ -275,6 +283,73 @@ model AcademicTrack {
 
   @@unique([programmeId, code])
   @@index([programmeId, active])
+}
+
+/// Official course from the Bocconi catalogue, imported per academic year by
+/// bocconi-scraper/scrape-courses.mjs. Read-only reference data for students.
+model AcademicCourse {
+  id          String   @id
+  catalogueId String
+  code        String
+  title       String
+  language    String?
+  sourceUrl   String
+  retrievedAt DateTime
+
+  catalogue   AcademicCatalogue         @relation(fields: [catalogueId], references: [id], onDelete: Cascade)
+  programmes  AcademicCourseProgramme[]
+  examRecords ExamRecord[]
+
+  @@unique([catalogueId, code])
+  @@index([catalogueId])
+}
+
+/// The same course is offered to several programmes with different credits,
+/// semester and compulsory/elective type — hence one row per pairing.
+model AcademicCourseProgramme {
+  id          String  @id
+  courseId    String
+  programmeId String
+  credits     Int
+  semester    String?
+  courseType  String? // OB / OBBC / OBCUR / OP / OBS, verbatim from the source
+
+  course    AcademicCourse    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  programme AcademicProgramme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, programmeId])
+  @@index([programmeId])
+}
+
+/// One exam attempt, owned by the student. Sensitive private data: never
+/// exposed to admins, logs, push payloads or RAG context (Phase 12A).
+///
+/// Attempts are rows, not revisions — a retake is a new row and the previous
+/// one is marked REJECTED. A partial unique index (see the migration) allows
+/// at most one PASSED row per course per student, so "the final attempt" needs
+/// no extra flag.
+model ExamRecord {
+  id          String     @id @default(cuid())
+  userId      String
+  courseId    String? // null for electives/exchange/custom courses
+  customTitle String? // required when courseId is null
+  credits     Int
+  studyYear   Int
+  semester    String?
+  status      ExamStatus @default(PLANNED)
+  grade       Int? // 18–30; null while PLANNED or for pass/fail
+  lode        Boolean    @default(false)
+  passFail    Boolean    @default(false)
+  examDate    DateTime?
+  notes       String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course AcademicCourse? @relation(fields: [courseId], references: [id], onDelete: SetNull)
+
+  @@index([userId, studyYear])
+  @@index([courseId])
 }
 
 /// Student-managed academic selection. Grades belong to the later gradebook phase.

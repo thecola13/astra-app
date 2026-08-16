@@ -20,6 +20,51 @@ export async function getActiveAcademicCatalogue() {
   });
 }
 
+/**
+ * Official courses for the gradebook picker, scoped to the active catalogue.
+ * `programmeId` narrows to one programme's offerings (credits/semester/type are
+ * per-programme); without it the search spans the whole catalogue, which is what
+ * electives and exchange courses need.
+ */
+export async function searchCourses(params: { q?: string; programmeId?: string; limit?: number }) {
+  const q = params.q?.trim();
+  const rows = await prisma.academicCourseProgramme.findMany({
+    where: {
+      programmeId: params.programmeId,
+      course: {
+        catalogue: { active: true },
+        ...(q
+          ? {
+              OR: [
+                { code: { startsWith: q } },
+                { title: { contains: q, mode: "insensitive" as const } },
+              ],
+            }
+          : {}),
+      },
+    },
+    include: { course: true },
+    orderBy: { course: { code: "asc" } },
+    take: Math.min(params.limit ?? 50, 200),
+  });
+
+  // Across programmes the same course appears once per pairing; showing it
+  // twice looks like a bug, so the first pairing wins.
+  const byCourse = new Map<string, (typeof rows)[number]>();
+  for (const row of rows) if (!byCourse.has(row.courseId)) byCourse.set(row.courseId, row);
+
+  return [...byCourse.values()].map((row) => ({
+    id: row.course.id,
+    code: row.course.code,
+    title: row.course.title,
+    language: row.course.language,
+    credits: row.credits,
+    semester: row.semester,
+    courseType: row.courseType,
+    sourceUrl: row.course.sourceUrl,
+  }));
+}
+
 export async function getAcademicProfile(userId: string) {
   return prisma.studentAcademicProfile.findUnique({
     where: { userId },

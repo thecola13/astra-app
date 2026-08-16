@@ -5,7 +5,9 @@
   "description": "One-off tooling: crawl ASTRA/Bocconi pages to PDFs, then ingest them into Neon (pgvector) for the Ask-ASTRA RAG chatbot. NOT part of the app workspaces.",
   "scripts": {
     "crawl": "node crawl.mjs",
-    "ingest": "node ingest.mjs"
+    "ingest": "node ingest.mjs",
+    "scrape:courses": "node scrape-courses.mjs",
+    "test": "node --test course-parse.test.mjs"
   },
   "dependencies": {
     "openai": "^4.77.0",

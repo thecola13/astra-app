@@ -11,3 +11,4 @@
 export * from "./schemas";
 export * from "./client";
 export * from "./domain";
+export * from "./gradebook-stats";
